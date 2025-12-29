@@ -81,4 +81,11 @@ if st.session_state["authentication_status"]:
             
             variacao = ((novo_preco / p_venda) - 1) * 100
             
-            st.metric("Novo Preço Sugerido", f"
+            st.metric("Novo Preço Sugerido", f"R$ {novo_preco:.2f}", f"{variacao:.2f}%")
+            
+            if st.button("💾 Salvar Simulação"):
+                c = conn.cursor()
+                c.execute("INSERT INTO historico VALUES (?, ?, ?, ?)", 
+                          (username, produto, round(novo_preco, 2), datetime.now().strftime("%d/%m %H:%M")))
+                conn.commit()
+                st.toast("Simulação salva com sucesso!")
