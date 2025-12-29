@@ -4,9 +4,12 @@ import sqlite3
 import streamlit_authenticator as stauth
 from datetime import datetime
 
-# --- 1. CONFIGURAÇÃO DA BASE DE DADOS (SQLite) ---
+# --- CONFIGURAÇÃO DA PÁGINA ---
+st.set_page_config(page_title="Simulador Fiscal Pro", layout="wide")
+
+# --- 1. BASE DE DADOS ---
 def init_db():
-    conn = sqlite3.connect('usuarios_saas.db')
+    conn = sqlite3.connect('usuarios_saas.db', check_same_thread=False)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS historico 
                  (usuario TEXT, produto TEXT, preco_novo REAL, data TEXT)''')
@@ -15,63 +18,67 @@ def init_db():
 
 conn = init_db()
 
-# --- 2. SISTEMA DE AUTENTICAÇÃO (SIMPLIFICADO) ---
-# Em produção, usaria um ficheiro YAML ou Base de Dados para as passwords
-names = ['Utilizador Demo', 'Cliente Premium']
-usernames = ['demo', 'premium']
-passwords = ['123', '456'] # NOTA: Use passwords hasheadas em produção!
+# --- 2. AUTENTICAÇÃO (VERSÃO ATUALIZADA) ---
+# Em produção, use senhas criptografadas!
+config = {
+    'usernames': {
+        'demo': {'name': 'Utilizador Demo', 'password': '123'},
+        'premium': {'name': 'Cliente Premium', 'password': '456'}
+    }
+}
 
 authenticator = stauth.Authenticate(
-    {'usernames': {usernames[i]: {'name': names[i], 'password': passwords[i]} for i in range(len(usernames))}},
-    'cookie_saas', 'signature_key', cookie_expiry_days=30
+    config['usernames'],
+    'cookie_saas',
+    'signature_key',
+    cookie_expiry_days=30
 )
 
-name, authentication_status, username = authenticator.login('Login', 'main')
+# CHAMADA CORRETA DO LOGIN: Apenas o parâmetro 'location'
+authenticator.login(location='main')
 
-# --- 3. LÓGICA DO SAAS (ÁREA LOGADA) ---
-if authentication_status:
-    authenticator.logout('Sair', 'sidebar')
-    st.sidebar.title(f"Bem-vindo, {name}")
+# --- 3. LÓGICA DO APP ---
+if st.session_state["authentication_status"]:
+    # Captura dados da sessão
+    name = st.session_state["name"]
+    username = st.session_state["username"]
     
-    st.title("🚀 Painel de Precificação Pro")
-
-    # Verificação de Plano
-    if username == 'demo':
-        st.warning("⚠️ Você está no plano Grátis. O processamento em lote está bloqueado.")
+    authenticator.logout('Sair do Sistema', 'sidebar')
     
-    # --- CÁLCULO ---
-    col1, col2 = st.columns(2)
-    with col1:
-        prod = st.text_input("Nome do Produto")
-        preco = st.number_input("Preço Atual (R$)", min_value=0.0)
-        carga = st.sidebar.slider("Alíquota IVA (%)", 25.0, 30.0, 26.5)
+    st.sidebar.success(f"Logado como: {name}")
+    st.title("📊 Simulador de Precificação - Reforma Tributária")
+
+    # Layout em colunas
+    tab1, tab2 = st.tabs(["Cálculo Individual", "Histórico de Simulações"])
+
+    with tab1:
+        col1, col2 = st.columns(2)
         
-    if st.button("Calcular e Salvar"):
-        # Lógica de cálculo (mesma do passo anterior)
-        novo_p = (preco * 0.72) / (1 - (carga/100)) # Exemplo simplificado
-        
-        # Salvar na Base de Dados
-        c = conn.cursor()
-        c.execute("INSERT INTO historico VALUES (?, ?, ?, ?)", 
-                  (username, prod, novo_p, datetime.now().strftime("%d/%m/%Y %H:%M")))
-        conn.commit()
-        st.success(f"Preço sugerido: R$ {novo_p:.2f}")
+        with col1:
+            st.subheader("Entrada de Dados")
+            produto = st.text_input("Nome do Item", placeholder="Ex: Cadeira de Escritório")
+            p_venda = st.number_input("Preço de Venda Atual (R$)", min_value=0.0, value=100.0)
+            carga_atual = st.slider("Carga Tributária Atual (%)", 0.0, 40.0, 27.25)
+            
+            # Configurações da Reforma
+            st.divider()
+            aliq_iva = st.sidebar.number_input("Nova Alíquota IBS/CBS (%)", value=26.5)
+            credito = st.sidebar.number_input("Crédito de Insumos (%)", value=5.0)
 
-    # --- HISTÓRICO (O VALOR DO SAAS) ---
-    st.divider()
-    st.subheader("📜 Seu Histórico de Cálculos")
-    historico_df = pd.read_sql_query(f"SELECT * FROM historico WHERE usuario='{username}'", conn)
-    st.table(historico_df)
-
-    # --- GATE DE PAGAMENTO (MONETIZAÇÃO) ---
-    if username == 'demo':
-        st.sidebar.divider()
-        st.sidebar.markdown("### 💎 Torne-se Premium")
-        st.sidebar.write("Aceda ao upload de Excel e suporte prioritário.")
-        # Link do Stripe ou Checkout
-        st.sidebar.link_button("Assinar por R$ 49/mês", "https://buy.stripe.com/exemplo")
-
-elif authentication_status is False:
-    st.error('Utilizador/Password incorretos')
-elif authentication_status is None:
-    st.warning('Por favor, insira o seu login.')
+        with col2:
+            st.subheader("Resultado Pós-Reforma")
+            
+            # Lógica Tributária:
+            # 1. Preço Base (Líquido de impostos antigos)
+            preco_base = p_venda * (1 - carga_atual / 100)
+            
+            # 2. Custo Ajustado (Considerando crédito da reforma)
+            custo_ajustado = preco_base * (1 - credito / 100)
+            
+            # 3. Novo Preço (Fórmula com imposto "por fora")
+            # Novo Preço = Custo / (1 - (IVA / 100))
+            novo_preco = custo_ajustado / (1 - (aliq_iva / 100))
+            
+            variacao = ((novo_preco / p_venda) - 1) * 100
+            
+            st.metric("Novo Preço Sugerido", f"
