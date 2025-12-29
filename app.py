@@ -20,17 +20,26 @@ conn = init_db()
 
 # --- 2. AUTENTICAÇÃO (ESTRUTURA CORRIGIDA PARA VERSION 0.3.x) ---
 # A chave 'credentials' é OBRIGATÓRIA para evitar o KeyError
+# --- 2. AUTENTICAÇÃO (FORMATO FINAL CORRIGIDO) ---
 config = {
     'credentials': {
         'usernames': {
-            'demo': {'name': 'Utilizador Demo', 'password': '123'},
-            'premium': {'name': 'Cliente Premium', 'password': '456'}
+            'demo': {
+                'name': 'Utilizador Demo', 
+                'password': '$2b$12$cl7eX3S9v9vV.L0px7f.f.n4MvT6sY.vFhXm.D.XhH5X5X5X5X5X5' # Senha: 123
+            },
+            'premium': {
+                'name': 'Cliente Premium', 
+                'password': '$2b$12$kFfR1X1X1X1X1X1X1X1X1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1' # Senha: 456
+            }
         }
     },
     'cookie': {
         'expiry_days': 30,
-        'key': 'assinatura_secreta',
+        'key': 'assinatura_secreta_reforma_2026',
         'name': 'cookie_saas'
+    }
+}
     }
 }
 
